@@ -103,7 +103,7 @@ class Address:
 
 
 class Contract:
-    logger = logging.getLogger('contract')
+    logger = logging.getLogger()
 
     @staticmethod
     def _deploy(web3: Web3, abi: list, bytecode: bytes, args: list) -> Address:
@@ -246,7 +246,7 @@ class Receipt:
 class Transact:
     """Represents an Ethereum transaction before it gets executed."""
 
-    logger = logging.getLogger('transact')
+    logger = logging.getLogger()
 
     def __init__(self,
                  origin: object,
@@ -405,7 +405,7 @@ class Transact:
         while True:
             seconds_elapsed = int(time.time() - initial_time)
 
-            if nonce and self.web3.eth.getTransactionCount(self.web3.eth.defaultAccount) > nonce:
+            if nonce is not None and self.web3.eth.getTransactionCount(self.web3.eth.defaultAccount) > nonce:
                 # Check if any transaction sent so far has been mined (has a receipt).
                 # If it has, we return either the receipt (if if was successful) or `None`.
                 for tx_hash in tx_hashes:
