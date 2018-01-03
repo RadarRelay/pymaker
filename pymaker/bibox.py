@@ -165,14 +165,16 @@ class BiboxApi:
     MIN_RETRY_DELAY = 0.1
     MAX_RETRY_DELAY = 0.3
 
-    def __init__(self, api_server: str, api_key: str, secret: str):
+    def __init__(self, api_server: str, api_key: str, secret: str, timeout: float):
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
         assert(isinstance(secret, str))
+        assert(isinstance(timeout, float))
 
         self.api_path = api_server
         self.api_key = api_key
         self.secret = secret
+        self.timeout = timeout
 
     def _request(self, path: str, cmd: dict, retry: bool):
         assert(isinstance(path, str))
@@ -187,7 +189,7 @@ class BiboxApi:
         }
 
         for try_number in range(1, self.MAX_RETRIES+1):
-            result = requests.post(self.api_path + path, json=call, timeout=15.5)
+            result = requests.post(self.api_path + path, json=call, timeout=self.timeout)
             result_json = result.json()
 
             if retry and try_number < self.MAX_RETRIES:
@@ -246,6 +248,9 @@ class BiboxApi:
         assert(isinstance(money_symbol, str))
         assert(isinstance(retry, bool))
 
+        self.logger.info(f"Placing order ({'SELL' if is_sell else 'BUY'}, amount {amount} {amount_symbol},"
+                         f" money {money} {money_symbol})...")
+
         order_id = self._request('/v1/orderpending', {"cmd": "orderpending/trade",
                                                       "body": {
                                                           "pair": amount_symbol + "_" + money_symbol,
@@ -258,8 +263,8 @@ class BiboxApi:
                                                           "money": float(money)
                                                       }}, retry)
 
-        self.logger.info(f"Placed order #{order_id} ({'SELL' if is_sell else 'BUY'}, amount {amount} {amount_symbol},"
-                         f" money {money} {money_symbol})")
+        self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} {amount_symbol},"
+                         f" money {money} {money_symbol}) as #{order_id}")
 
         return order_id
 
@@ -267,6 +272,7 @@ class BiboxApi:
         assert(isinstance(order_id, int))
         assert(isinstance(retry, bool))
 
+        self.logger.info(f"Cancelling order #{order_id}...")
         self._request('/v1/orderpending', {"cmd": "orderpending/cancelTrade", "body": {"orders_id": order_id}}, retry)
         self.logger.info(f"Cancelled order #{order_id}")
 
