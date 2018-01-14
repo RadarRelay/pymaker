@@ -249,21 +249,21 @@ class Transact:
     logger = logging.getLogger()
 
     def __init__(self,
-                 origin: object,
+                 origin: Optional[object],
                  web3: Web3,
-                 abi: list,
+                 abi: Optional[list],
                  address: Address,
-                 contract: object,
-                 function_name: str,
-                 parameters: list,
+                 contract: Optional[object],
+                 function_name: Optional[str],
+                 parameters: Optional[list],
                  extra: Optional[dict] = None):
-        assert(isinstance(origin, object))
+        assert(isinstance(origin, object) or (origin is None))
         assert(isinstance(web3, Web3))
-        assert(isinstance(abi, list))
+        assert(isinstance(abi, list) or (abi is None))
         assert(isinstance(address, Address))
-        assert(isinstance(contract, object))
-        assert(isinstance(function_name, str))
-        assert(isinstance(parameters, list))
+        assert(isinstance(contract, object) or (contract is None))
+        assert(isinstance(function_name, str) or (function_name is None))
+        assert(isinstance(parameters, list) or (parameters is None))
         assert(isinstance(extra, dict) or (extra is None))
 
         self.origin = origin
@@ -299,13 +299,19 @@ class Transact:
         else:
             return gas_estimate + 100000
 
-    def _func(self, gas: int, gas_price: Optional[int], nonce: Optional[int]):
+    def _func(self, from_account: str, gas: int, gas_price: Optional[int], nonce: Optional[int]):
         gas_price_dict = {'gasPrice': gas_price} if gas_price is not None else {}
         nonce_dict = {'nonce': nonce} if nonce is not None else {}
 
-        return self.contract.\
-            transact({**{'gas': gas}, **gas_price_dict, **nonce_dict, **self._as_dict(self.extra)}).\
-            __getattr__(self.function_name)(*self.parameters)
+        transaction_params = {**{'from': from_account, 'gas': gas},
+                              **gas_price_dict,
+                              **nonce_dict,
+                              **self._as_dict(self.extra)}
+
+        if self.contract is not None:
+            return self.contract.transact(transaction_params).__getattr__(self.function_name)(*self.parameters)
+        else:
+            return self.web3.eth.sendTransaction({**transaction_params, **{'to': self.address.address}})
 
     def name(self) -> str:
         """Returns the nicely formatted name of this pending Ethereum transaction.
@@ -313,23 +319,36 @@ class Transact:
         Returns:
             Nicely formatted name of this pending Ethereum transaction.
         """
-        name = f"{repr(self.origin)}.{self.function_name}({self.parameters})"
+        if self.origin:
+            name = f"{repr(self.origin)}.{self.function_name}({self.parameters})"
+        else:
+            name = f"Regular transfer to {self.address}"
+
         return name if self.extra is None else name + f" with {self.extra}"
 
-    def estimated_gas(self) -> int:
+    def estimated_gas(self, from_address: Address) -> int:
         """Return an estimated amount of gas which will get consumed by this Ethereum transaction.
 
         May throw an exception if the actual transaction will fail as well.
 
+        Args:
+            from_address: Address to simulate sending the transaction from.
+
         Returns:
             Amount of gas as an integer.
         """
-        estimate = self.contract.estimateGas(self._as_dict(self.extra)).__getattr__(self.function_name)(*self.parameters)
+        assert(isinstance(from_address, Address))
 
-        # testrpc does estimate too little gas at times, it did happen with TxManager definitely
-        # so we always add 1mio tp the estimate as in testrpc gas block limit doesn't matter
-        if str(self.web3.providers[0]) == 'EthereumTesterProvider':
-            estimate = estimate + 1000000
+        if self.contract is not None:
+            estimate = self.contract.estimateGas({**self._as_dict(self.extra), **{'from': from_address.address}})\
+                .__getattr__(self.function_name)(*self.parameters)
+
+            # testrpc does estimate too little gas at times, it did happen with TxManager definitely
+            # so we always add 1mio tp the estimate as in testrpc gas block limit doesn't matter
+            if str(self.web3.providers[0]) == 'EthereumTesterProvider':
+                estimate = estimate + 1000000
+        else:
+            estimate = 21000
 
         return estimate
 
@@ -343,8 +362,9 @@ class Transact:
 
         Out-of-gas exceptions are automatically recognized as transaction failures.
 
-        Allowed keyword arguments are: `gas`, `gas_buffer`, `gas_price`. `gas_price` needs
-        to be an instance of a class inheriting from :py:class:`pymaker.gas.GasPrice`.
+        Allowed keyword arguments are: `from_address`, `gas`, `gas_buffer`, `gas_price`. `gas_price`
+        needs to be an instance of a class inheriting from :py:class:`pymaker.gas.GasPrice`.
+        `from_address` needs to be an instance of :py:class:`pymaker.Address`.
 
         The `gas` keyword argument is the gas limit for the transaction, whereas `gas_buffer`
         specifies how much gas should be added to the estimate. They can not be present
@@ -376,6 +396,10 @@ class Transact:
             A future value of either a :py:class:`pymaker.Receipt` object if the transaction
             invocation was successful, or `None` if it failed.
         """
+
+        # Get the from account.
+        from_account = kwargs['from_address'].address if ('from_address' in kwargs) else self.web3.eth.defaultAccount
+
         # First we try to estimate the gas usage of the transaction. If gas estimation fails
         # it means there is no point in sending the transaction, thus we fail instantly and
         # do not increment the nonce. If the estimation is successful, we pass the calculated
@@ -386,7 +410,7 @@ class Transact:
         #
         # This is why gas estimation has to happen first and before the nonce gets incremented.
         try:
-            gas_estimate = self.estimated_gas()
+            gas_estimate = self.estimated_gas(Address(from_account))
         except:
             self.logger.warning(f"Transaction {self.name()} will fail, refusing to send ({sys.exc_info()[1]})")
             return None
@@ -405,7 +429,7 @@ class Transact:
         while True:
             seconds_elapsed = int(time.time() - initial_time)
 
-            if nonce is not None and self.web3.eth.getTransactionCount(self.web3.eth.defaultAccount) > nonce:
+            if nonce is not None and self.web3.eth.getTransactionCount(from_account) > nonce:
                 # Check if any transaction sent so far has been mined (has a receipt).
                 # If it has, we return either the receipt (if if was successful) or `None`.
                 for tx_hash in tx_hashes:
@@ -434,7 +458,7 @@ class Transact:
                 gas_price_last = gas_price_value
 
                 try:
-                    tx_hash = self._func(gas, gas_price_value, nonce)
+                    tx_hash = self._func(from_account, gas, gas_price_value, nonce)
                     tx_hashes.append(tx_hash)
 
                     # If this is the first transaction sent, get its nonce so we can override the transaction with
@@ -500,3 +524,7 @@ class Transfer:
 
     def __hash__(self):
         return hash((self.token_address, self.from_address, self.token_address, self.value))
+
+
+def eth_transfer(web3: Web3, to: Address, amount: Wad) -> Transact:
+    return Transact(None, web3, None, to, None, None, None, {'value': amount.value})

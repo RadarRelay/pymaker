@@ -195,7 +195,8 @@ class BiboxApi:
             if retry and try_number < self.MAX_RETRIES:
                 try:
                     if str(result_json['error']['code']) == '4003':
-                        self.logger.info(f"BiBox API busy ({result_json['error']['code']}: '{result_json['error']['msg']}'), retrying")
+                        self.logger.info(f"BiBox API busy for '{cmd['cmd']}' ({result_json['error']['code']}:"
+                                         f" '{result_json['error']['msg']}'), retrying")
                         time.sleep(self.MIN_RETRY_DELAY + random()*(self.MAX_RETRY_DELAY-self.MIN_RETRY_DELAY))
                         continue
                 except:
@@ -223,6 +224,9 @@ class BiboxApi:
         return self._request('/v1/transfer', {"cmd": "transfer/assets", "body": {}}, retry)
 
     def get_orders(self, pair: str, retry: bool = False) -> List[Order]:
+        assert(isinstance(pair, str))
+        assert(isinstance(retry, bool))
+
         result = self._request('/v1/orderpending', {"cmd": "orderpending/orderPendingList", "body": {"pair": pair,
                                                                                                      "account_type": 0,
                                                                                                      "page": 1,
@@ -268,13 +272,15 @@ class BiboxApi:
 
         return order_id
 
-    def cancel_order(self, order_id: int, retry: bool = False):
+    def cancel_order(self, order_id: int, retry: bool = False) -> bool:
         assert(isinstance(order_id, int))
         assert(isinstance(retry, bool))
 
         self.logger.info(f"Cancelling order #{order_id}...")
-        self._request('/v1/orderpending', {"cmd": "orderpending/cancelTrade", "body": {"orders_id": order_id}}, retry)
+        result = self._request('/v1/orderpending', {"cmd": "orderpending/cancelTrade", "body": {"orders_id": order_id}}, retry)
         self.logger.info(f"Cancelled order #{order_id}")
+
+        return result == "撤销中"
 
     def get_trade_history(self, pair: str, number_of_trades: int, retry: bool = False) -> List[Trade]:
         assert(isinstance(pair, str))
