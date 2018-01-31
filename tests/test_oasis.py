@@ -14,16 +14,17 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
+from typing import List
 from unittest.mock import Mock
 
 import pytest
+import time
 from web3 import EthereumTesterProvider
 from web3 import Web3
 
 from pymaker import Address, Wad
 from pymaker.approval import directly
-from pymaker.oasis import SimpleMarket, ExpiringMarket, MatchingMarket
+from pymaker.oasis import SimpleMarket, ExpiringMarket, MatchingMarket, Order
 from pymaker.token import DSToken
 from tests.helpers import wait_until_mock_called, is_hashable
 
@@ -39,6 +40,8 @@ class GeneralMarketTest:
         self.token1.mint(Wad.from_number(10000)).transact()
         self.token2 = DSToken.deploy(self.web3, 'BBB')
         self.token2.mint(Wad.from_number(10000)).transact()
+        self.token3 = DSToken.deploy(self.web3, 'CCC')
+        self.token3.mint(Wad.from_number(10000)).transact()
         self.otc = None
 
     def test_approve_and_make_and_getters(self):
@@ -64,6 +67,60 @@ class GeneralMarketTest:
 
         # and
         assert self.otc.get_orders() == [self.otc.get_order(1)]
+
+    def test_get_orders_by_pair(self):
+        # given
+        self.otc.approve([self.token1, self.token2, self.token3], directly())
+
+        # when
+        self.otc.make(pay_token=self.token1.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token2.address, buy_amount=Wad.from_number(2)).transact()
+
+        self.otc.make(pay_token=self.token1.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token2.address, buy_amount=Wad.from_number(4)).transact()
+
+        self.otc.make(pay_token=self.token1.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token2.address, buy_amount=Wad.from_number(3)).transact()
+
+        self.otc.make(pay_token=self.token1.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token3.address, buy_amount=Wad.from_number(2)).transact()
+
+        self.otc.make(pay_token=self.token1.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token3.address, buy_amount=Wad.from_number(4)).transact()
+
+        self.otc.make(pay_token=self.token1.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token3.address, buy_amount=Wad.from_number(3)).transact()
+
+        self.otc.make(pay_token=self.token2.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token3.address, buy_amount=Wad.from_number(2)).transact()
+
+        self.otc.make(pay_token=self.token2.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token3.address, buy_amount=Wad.from_number(4)).transact()
+
+        self.otc.make(pay_token=self.token2.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token3.address, buy_amount=Wad.from_number(3)).transact()
+
+        self.otc.make(pay_token=self.token2.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token1.address, buy_amount=Wad.from_number(5)).transact()
+
+        self.otc.make(pay_token=self.token2.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token1.address, buy_amount=Wad.from_number(6)).transact()
+
+        # then
+        def order_ids(orders: List[Order]) -> List[int]:
+            return list(map(lambda order: order.order_id, orders))
+
+        assert len(self.otc.get_orders()) == 11
+        assert order_ids(self.otc.get_orders(self.token1.address, self.token2.address)) == [1, 2, 3]
+        assert order_ids(self.otc.get_orders(self.token1.address, self.token3.address)) == [4, 5, 6]
+        assert order_ids(self.otc.get_orders(self.token2.address, self.token3.address)) == [7, 8, 9]
+        assert order_ids(self.otc.get_orders(self.token2.address, self.token1.address)) == [10, 11]
+
+        # when
+        self.otc.kill(8).transact()
+
+        # then
+        assert order_ids(self.otc.get_orders(self.token2.address, self.token3.address)) == [7, 9]
 
     def test_get_orders_by_maker(self):
         # given
@@ -229,6 +286,22 @@ class GeneralMarketTest:
         assert past_take[0].timestamp != 0
         assert past_take[0].raw['blockNumber'] > 0
 
+    def test_past_take_with_filter(self):
+        # when
+        self.otc.approve([self.token1], directly())
+        self.otc.make(pay_token=self.token1.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token2.address, buy_amount=Wad.from_number(2)).transact()
+
+        # and
+        self.otc.approve([self.token2], directly())
+        self.otc.take(1, Wad.from_number(0.5)).transact()
+
+        # then
+        assert len(self.otc.past_take(PAST_BLOCKS, {'maker': self.our_address.address})) == 1
+        assert len(self.otc.past_take(PAST_BLOCKS, {'taker': self.our_address.address})) == 1
+        assert len(self.otc.past_take(PAST_BLOCKS, {'maker': '0x0101010101020202020203030303030404040404'})) == 0
+        assert len(self.otc.past_take(PAST_BLOCKS, {'taker': '0x0101010101020202020203030303030404040404'})) == 0
+
     def test_past_kill(self):
         # when
         self.otc.approve([self.token1], directly())
@@ -323,6 +396,30 @@ class GeneralMarketTest:
         assert on_take.raw['blockNumber'] > 0
 
     @pytest.mark.timeout(10)
+    def test_on_take_wih_filter(self):
+        # given
+        on_take_filter1_mock = Mock()
+        on_take_filter2_mock = Mock()
+        self.otc.on_take(on_take_filter1_mock, {'maker': self.our_address.address})
+        self.otc.on_take(on_take_filter2_mock, {'maker': '0x0101010101020202020201010101010303030303'})
+
+        # when
+        self.otc.approve([self.token1], directly())
+        self.otc.make(pay_token=self.token1.address, pay_amount=Wad.from_number(1),
+                      buy_token=self.token2.address, buy_amount=Wad.from_number(2)).transact()
+
+        # and
+        self.otc.approve([self.token2], directly())
+        self.otc.take(1, Wad.from_number(0.5)).transact()
+
+        # then
+        assert len(wait_until_mock_called(on_take_filter1_mock)) == 1
+
+        # and
+        time.sleep(2)
+        assert not on_take_filter2_mock.called
+
+    @pytest.mark.timeout(10)
     def test_on_kill(self):
         # given
         on_kill_mock = Mock()
@@ -394,6 +491,8 @@ class TestMatchingMarket(GeneralMarketTest):
         GeneralMarketTest.setup_method(self)
         self.otc = MatchingMarket.deploy(self.web3, 2500000000)
         self.otc.add_token_pair_whitelist(self.token1.address, self.token2.address).transact()
+        self.otc.add_token_pair_whitelist(self.token1.address, self.token3.address).transact()
+        self.otc.add_token_pair_whitelist(self.token2.address, self.token3.address).transact()
 
     def test_fail_when_no_contract_under_that_address(self):
         # expect

@@ -201,7 +201,7 @@ class SimpleMarket(Contract):
         for token in tokens:
             approval_function(token, self.address, 'OasisDEX')
 
-    def on_make(self, handler):
+    def on_make(self, handler, event_filter: dict = None):
         """Subscribe to LogMake events.
 
         `LogMake` events are emitted by the Oasis contract every time someone places an order.
@@ -209,12 +209,14 @@ class SimpleMarket(Contract):
         Args:
             handler: Function which will be called for each subsequent `LogMake` event.
                 This handler will receive a :py:class:`pymaker.oasis.LogMake` class instance.
+            event_filter: Filter which will be applied to event subscription.
         """
         assert(callable(handler))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        self._on_event(self._contract, 'LogMake', LogMake, handler)
+        self._on_event(self._contract, 'LogMake', LogMake, handler, event_filter)
 
-    def on_bump(self, handler):
+    def on_bump(self, handler, event_filter: dict = None):
         """Subscribe to LogBump events.
 
         `LogBump` events are emitted by the Oasis contract every time someone calls the `bump()` function.
@@ -222,12 +224,14 @@ class SimpleMarket(Contract):
         Args:
             handler: Function which will be called for each subsequent `LogBump` event.
                 This handler will receive a :py:class:`pymaker.oasis.LogBump` class instance.
+            event_filter: Filter which will be applied to event subscription.
         """
         assert(callable(handler))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        self._on_event(self._contract, 'LogBump', LogBump, handler)
+        self._on_event(self._contract, 'LogBump', LogBump, handler, event_filter)
 
-    def on_take(self, handler):
+    def on_take(self, handler, event_filter: dict = None):
         """Subscribe to LogTake events.
 
         `LogTake` events are emitted by the Oasis contract every time someone takes an order.
@@ -235,12 +239,14 @@ class SimpleMarket(Contract):
         Args:
             handler: Function which will be called for each subsequent `LogTake` event.
                 This handler will receive a :py:class:`pymaker.oasis.LogTake` class instance.
+            event_filter: Filter which will be applied to event subscription.
         """
         assert(callable(handler))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        self._on_event(self._contract, 'LogTake', LogTake, handler)
+        self._on_event(self._contract, 'LogTake', LogTake, handler, event_filter)
 
-    def on_kill(self, handler):
+    def on_kill(self, handler, event_filter: dict = None):
         """Subscribe to LogKill events.
 
         `LogKill` events are emitted by the Oasis contract every time someone cancels an order.
@@ -248,70 +254,80 @@ class SimpleMarket(Contract):
         Args:
             handler: Function which will be called for each subsequent `LogKill` event.
                 This handler will receive a :py:class:`pymaker.oasis.LogKill` class instance.
+            event_filter: Filter which will be applied to event subscription.
         """
         assert(callable(handler))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        self._on_event(self._contract, 'LogKill', LogKill, handler)
+        self._on_event(self._contract, 'LogKill', LogKill, handler, event_filter)
 
-    def past_make(self, number_of_past_blocks: int) -> List[LogMake]:
+    def past_make(self, number_of_past_blocks: int, event_filter: dict = None) -> List[LogMake]:
         """Synchronously retrieve past LogMake events.
 
         `LogMake` events are emitted by the Oasis contract every time someone places an order.
 
         Args:
             number_of_past_blocks: Number of past Ethereum blocks to retrieve the events from.
+            event_filter: Filter which will be applied to returned events.
 
         Returns:
             List of past `LogMake` events represented as :py:class:`pymaker.oasis.LogMake` class.
         """
         assert(isinstance(number_of_past_blocks, int))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        return self._past_events(self._contract, 'LogMake', LogMake, number_of_past_blocks)
+        return self._past_events(self._contract, 'LogMake', LogMake, number_of_past_blocks, event_filter)
 
-    def past_bump(self, number_of_past_blocks: int) -> List[LogBump]:
+    def past_bump(self, number_of_past_blocks: int, event_filter: dict = None) -> List[LogBump]:
         """Synchronously retrieve past LogBump events.
 
         `LogBump` events are emitted by the Oasis contract every time someone calls the `bump()` function.
 
         Args:
             number_of_past_blocks: Number of past Ethereum blocks to retrieve the events from.
+            event_filter: Filter which will be applied to returned events.
 
         Returns:
             List of past `LogBump` events represented as :py:class:`pymaker.oasis.LogBump` class.
         """
         assert(isinstance(number_of_past_blocks, int))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        return self._past_events(self._contract, 'LogBump', LogBump, number_of_past_blocks)
+        return self._past_events(self._contract, 'LogBump', LogBump, number_of_past_blocks, event_filter)
 
-    def past_take(self, number_of_past_blocks: int) -> List[LogTake]:
+    def past_take(self, number_of_past_blocks: int, event_filter: dict = None) -> List[LogTake]:
         """Synchronously retrieve past LogTake events.
 
         `LogTake` events are emitted by the Oasis contract every time someone takes an order.
 
         Args:
             number_of_past_blocks: Number of past Ethereum blocks to retrieve the events from.
+            event_filter: Filter which will be applied to returned events.
 
         Returns:
             List of past `LogTake` events represented as :py:class:`pymaker.oasis.LogTake` class.
         """
         assert(isinstance(number_of_past_blocks, int))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        return self._past_events(self._contract, 'LogTake', LogTake, number_of_past_blocks)
+        return self._past_events(self._contract, 'LogTake', LogTake, number_of_past_blocks, event_filter)
 
-    def past_kill(self, number_of_past_blocks: int) -> List[LogKill]:
+    def past_kill(self, number_of_past_blocks: int, event_filter: dict = None) -> List[LogKill]:
         """Synchronously retrieve past LogKill events.
 
         `LogKill` events are emitted by the Oasis contract every time someone cancels an order.
 
         Args:
             number_of_past_blocks: Number of past Ethereum blocks to retrieve the events from.
+            event_filter: Filter which will be applied to returned events.
 
         Returns:
             List of past `LogKill` events represented as :py:class:`pymaker.oasis.LogKill` class.
         """
         assert(isinstance(number_of_past_blocks, int))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        return self._past_events(self._contract, 'LogKill', LogKill, number_of_past_blocks)
+        return self._past_events(self._contract, 'LogKill', LogKill, number_of_past_blocks, event_filter)
 
     def get_last_order_id(self) -> int:
         """Get the id of the last order created on the market.
@@ -346,14 +362,29 @@ class SimpleMarket(Contract):
                          pay_amount=Wad(array[0]), buy_token=Address(array[3]), buy_amount=Wad(array[2]),
                          timestamp=array[5])
 
-    def get_orders(self) -> List[Order]:
+    def get_orders(self, pay_token: Address = None, buy_token: Address = None) -> List[Order]:
         """Get all active orders.
+
+        If both `pay_token` and `buy_token` are specified, orders will be filtered by these.
+        Either none or both of these parameters have to be specified.
+
+        Args:
+            `pay_token`: Address of the `pay_token` to filter the orders by.
+            `buy_token`: Address of the `buy_token` to filter the orders by.
 
         Returns:
             A list of `Order` objects representing all active orders on Oasis.
         """
+        assert((isinstance(pay_token, Address) and isinstance(buy_token, Address))
+               or (pay_token is None and buy_token is None))
+
         orders = [self.get_order(order_id + 1) for order_id in range(self.get_last_order_id())]
-        return [order for order in orders if order is not None]
+        orders = [order for order in orders if order is not None]
+
+        if pay_token is not None and buy_token is not None:
+            orders = list(filter(lambda order: order.pay_token == pay_token and order.buy_token == buy_token, orders))
+
+        return orders
 
     def get_orders_by_maker(self, maker: Address) -> List[Order]:
         """Get all active orders created by `maker`.
@@ -603,6 +634,43 @@ class MatchingMarket(ExpiringMarket):
 
         return Transact(self, self.web3, self.abi, self.address, self._contract,
                         'addTokenPairWhitelist', [base_token.address, quote_token.address])
+
+    def get_orders(self, pay_token: Address = None, buy_token: Address = None) -> List[Order]:
+        """Get all active orders.
+
+        If both `pay_token` and `buy_token` are specified, orders will be filtered by these.
+        In case of the _MatchingMarket_ implementation, order enumeration will be much efficient
+        if these two parameters are supplied, as then orders can be fetched using `getBestOffer`
+        and a series of `getWorseOffer` calls. This approach will result in much lower number of calls
+        comparing to the naive 0..get_last_order_id approach, especially if the number of inactive orders
+        is very high.
+
+        Either none or both of these parameters have to be specified.
+
+        Args:
+            `pay_token`: Address of the `pay_token` to filter the orders by.
+            `buy_token`: Address of the `buy_token` to filter the orders by.
+
+        Returns:
+            A list of `Order` objects representing all active orders on Oasis.
+        """
+        assert((isinstance(pay_token, Address) and isinstance(buy_token, Address))
+               or (pay_token is None and buy_token is None))
+
+        if pay_token is not None and buy_token is not None:
+            orders = []
+
+            order_id = self._contract.call().getBestOffer(pay_token.address, buy_token.address)
+            while order_id != 0:
+                order = self.get_order(order_id)
+                if order is not None:
+                    orders.append(order)
+
+                order_id = self._contract.call().getWorseOffer(order_id)
+
+            return sorted(orders, key=lambda order: order.order_id)
+        else:
+            return super(ExpiringMarket, self).get_orders(pay_token, buy_token)
 
     def make(self, pay_token: Address, pay_amount: Wad, buy_token: Address, buy_amount: Wad, pos: int = None) -> Transact:
         """Create a new order.

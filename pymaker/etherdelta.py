@@ -271,7 +271,7 @@ class EtherDelta(Contract):
         """
         return Wad(self._contract.call().feeRebate())
 
-    def on_trade(self, handler):
+    def on_trade(self, handler, event_filter: dict = None):
         """Subscribe to LogTrade events.
 
         `LogTrade` events are emitted by the EtherDelta contract every time someone takes an order.
@@ -279,25 +279,29 @@ class EtherDelta(Contract):
         Args:
             handler: Function which will be called for each subsequent `LogTrade` event.
                 This handler will receive a :py:class:`pymaker.etherdelta.LogTrade` class instance.
+            event_filter: Filter which will be applied to event subscription.
         """
         assert(callable(handler))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        self._on_event(self._contract, 'Trade', LogTrade, handler)
+        self._on_event(self._contract, 'Trade', LogTrade, handler, event_filter)
 
-    def past_trade(self, number_of_past_blocks: int) -> List[LogTrade]:
+    def past_trade(self, number_of_past_blocks: int, event_filter: dict = None) -> List[LogTrade]:
         """Synchronously retrieve past LogTrade events.
 
         `LogTrade` events are emitted by the EtherDelta contract every time someone takes an order.
 
         Args:
             number_of_past_blocks: Number of past Ethereum blocks to retrieve the events from.
+            event_filter: Filter which will be applied to returned events.
 
         Returns:
             List of past `LogTrade` events represented as :py:class:`pymaker.etherdelta.LogTrade` class.
         """
         assert(isinstance(number_of_past_blocks, int))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
 
-        return self._past_events(self._contract, 'Trade', LogTrade, number_of_past_blocks)
+        return self._past_events(self._contract, 'Trade', LogTrade, number_of_past_blocks, event_filter)
 
     def deposit(self, amount: Wad) -> Transact:
         """Deposits `amount` of raw ETH to EtherDelta.
