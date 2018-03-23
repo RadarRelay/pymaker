@@ -42,7 +42,7 @@ class ERC20Token(Contract):
 
     def total_supply(self) -> Wad:
         """Returns the total supply of the token.
-        
+
         Returns:
             The total supply of the token.
         """
@@ -280,3 +280,67 @@ class DSEthToken(ERC20Token):
 
     def __repr__(self):
         return f"DSEthToken('{self.address}')"
+
+
+class WEthToken(ERC20Token):
+    """A client for the `WEthToken` contract.
+
+    `WEthToken`, also known as ETH Wrapper or W-ETH, is a contract into which you can deposit
+    raw ETH and then deal with it like with any other ERC20 token. In addition to the `deposit()`
+    and `withdraw()` methods, it implements the standard ERC20 token API.
+
+    This WETH token specifically implements the WETH9 contract:
+    https://etherscan.io/address/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2#code
+
+    Attributes:
+        web3: An instance of `Web` from `web3.py`.
+        address: Ethereum address of the `WEthToken` contract.
+    """
+
+    abi = Contract._load_abi(__name__, 'abi/WEthToken.abi')
+    bin = Contract._load_bin(__name__, 'abi/WEthToken.bin')
+
+    @staticmethod
+    def deploy(web3: Web3):
+        """Deploy a new instance of the `WEthToken` contract.
+
+        Args:
+            web3: An instance of `Web` from `web3.py`.
+
+        Returns:
+            A `WEthToken` class instance.
+        """
+        return WEthToken(web3=web3, address=Contract._deploy(web3, WEthToken.abi, WEthToken.bin, []))
+
+    def __init__(self, web3, address):
+        super().__init__(web3, address)
+        self._contract = self._get_contract(web3, self.abi, address)
+
+    def deposit(self, amount: Wad) -> Transact:
+        """Deposits `amount` of raw ETH to `WEthToken`.
+
+        Args:
+            amount: Amount of raw ETH to be deposited to `WEthToken`.
+
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+        assert(isinstance(amount, Wad))
+        return Transact(self, self.web3, self.abi, self.address, self._contract, 'deposit', [], {'value': amount.value})
+
+    def withdraw(self, amount: Wad) -> Transact:
+        """Withdraws `amount` of raw ETH from `WEthToken`.
+
+        The withdrawn ETH will get transferred to the calling account.
+
+        Args:
+            amount: Amount of raw ETH to be withdrawn from `WEthToken`.
+
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+        assert(isinstance(amount, Wad))
+        return Transact(self, self.web3, self.abi, self.address, self._contract, 'withdraw', [amount.value])
+
+    def __repr__(self):
+        return f"WEthToken('{self.address}')"

@@ -152,6 +152,11 @@ DSEthToken
 .. autoclass:: pymaker.token.DSEthToken
     :members:
 
+WEthToken
+""""""""""
+
+.. autoclass:: pymaker.token.WEthToken
+    :members:
 
 Exchanges
 ~~~~~~~~~
