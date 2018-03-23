@@ -22,7 +22,7 @@ from pymaker.util import synchronize
 from web3 import EthereumTesterProvider
 from web3 import Web3
 
-from pymaker.token import DSToken, DSEthToken, ERC20Token
+from pymaker.token import DSToken, DSEthToken, WEthToken, ERC20Token
 
 
 class TestERC20Token:
@@ -211,3 +211,36 @@ class TestDSEthToken:
 
     def test_should_have_printable_representation(self):
         assert repr(self.dsethtoken) == f"DSEthToken('{self.dsethtoken.address}')"
+
+
+class TestWEthToken:
+    def setup_method(self):
+        self.web3 = Web3(EthereumTesterProvider())
+        self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
+        self.our_address = Address(self.web3.eth.defaultAccount)
+        self.wethtoken = WEthToken.deploy(self.web3)
+
+    def test_fail_when_no_contract_under_that_address(self):
+        # expect
+        with pytest.raises(Exception):
+            WEthToken(web3=self.web3, address=Address('0xdeadadd1e5500000000000000000000000000000'))
+
+    def test_deposit(self):
+        # when
+        self.wethtoken.deposit(Wad(100000)).transact()
+
+        # then
+        assert self.wethtoken.balance_of(self.our_address) == Wad(100000)
+
+    def test_withdraw(self):
+        # given
+        self.wethtoken.deposit(Wad(100000)).transact()
+
+        # when
+        self.wethtoken.withdraw(Wad(40000)).transact()
+
+        # then
+        assert self.wethtoken.balance_of(self.our_address) == Wad(60000)
+
+    def test_should_have_printable_representation(self):
+        assert repr(self.wethtoken) == f"WEthToken('{self.wethtoken.address}')"
