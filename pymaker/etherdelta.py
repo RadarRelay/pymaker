@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017 reverendus
+# Copyright (C) 2017-2018 reverendus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -24,13 +24,14 @@ from pprint import pformat
 from subprocess import Popen, PIPE
 from typing import List
 
-from eth_abi.encoding import get_single_encoder
 from web3 import Web3
 
 from pymaker import Contract, Address, Transact
 from pymaker.numeric import Wad
+from pymaker.sign import eth_sign, to_vrs
+from pymaker.tightly_packed import encode_address, encode_uint256
 from pymaker.token import ERC20Token
-from pymaker.util import bytes_to_hexstring, hexstring_to_bytes, eth_sign
+from pymaker.util import bytes_to_hexstring, hexstring_to_bytes
 
 
 class Order:
@@ -425,12 +426,6 @@ class EtherDelta(Contract):
         assert(pay_amount > Wad(0))
         assert(buy_amount > Wad(0))
 
-        def encode_address(address: Address) -> bytes:
-            return get_single_encoder("address", None, None)(address.address)[12:]
-
-        def encode_uint256(value: int) -> bytes:
-            return get_single_encoder("uint", 256, None)(value)
-
         nonce = self.random_nonce()
         order_hash = hashlib.sha256(encode_address(self.address) +
                                     encode_address(buy_token) +
@@ -439,11 +434,9 @@ class EtherDelta(Contract):
                                     encode_uint256(pay_amount.value) +
                                     encode_uint256(expires) +
                                     encode_uint256(nonce)).digest()
-        # TODO duplicate code below
-        signed_hash = eth_sign(self.web3, order_hash)[2:]
-        r = bytes.fromhex(signed_hash[0:64])
-        s = bytes.fromhex(signed_hash[64:128])
-        v = ord(bytes.fromhex(signed_hash[128:130]))
+
+        signature = eth_sign(order_hash, self.web3)
+        v, r, s = to_vrs(signature)
 
         return Order(self, Address(self.web3.eth.defaultAccount), pay_token, pay_amount, buy_token, buy_amount,
                      expires, nonce, v, r, s)

@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017 reverendus
+# Copyright (C) 2017-2018 reverendus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -27,8 +27,9 @@ from web3 import Web3
 
 from pymaker import Contract, Address, Transact
 from pymaker.numeric import Wad
+from pymaker.sign import eth_sign, to_vrs
 from pymaker.token import ERC20Token
-from pymaker.util import bytes_to_hexstring, hexstring_to_bytes, eth_sign
+from pymaker.util import bytes_to_hexstring, hexstring_to_bytes
 
 
 class Order:
@@ -449,11 +450,8 @@ class ZrxExchange(Contract):
         """
         assert(isinstance(order, Order))
 
-        # TODO duplicate code below
-        signed_hash = eth_sign(self.web3, hexstring_to_bytes(self.get_order_hash(order)))[2:]
-        r = bytes.fromhex(signed_hash[0:64])
-        s = bytes.fromhex(signed_hash[64:128])
-        v = ord(bytes.fromhex(signed_hash[128:130]))
+        signature = eth_sign(hexstring_to_bytes(self.get_order_hash(order)), self.web3)
+        v, r, s = to_vrs(signature)
 
         signed_order = copy.copy(order)
         signed_order.ec_signature_r = bytes_to_hexstring(r)
@@ -538,13 +536,16 @@ class ZrxRelayerApi:
         self.exchange = exchange
         self.api_server = api_server
 
-    def get_orders_by_maker(self, maker: Address) -> List[Order]:
+    def get_orders_by_maker(self, maker: Address, per_page: int = 100) -> List[Order]:
         """Returns all active orders created by `maker`.
 
         In order to get them, issues a `/v0/orders` call to the Standard Relayer API.
 
         Args:
             maker: Address of the `maker` to filter the orders by.
+            per_page: Maximum number of orders to be downloaded per page. 0x Standard Relayer API
+                limitation is 100, but some relayers can handle more so that's why this parameter
+                is exposed.
 
         Returns:
             Active orders created by `maker`, as a list of instances of the :py:class:`pymaker.zrx.Order` class.
@@ -554,10 +555,13 @@ class ZrxRelayerApi:
         url = f"{self.api_server}/v0/orders?" \
               f"exchangeContractAddress={self.exchange.address.address}&" \
               f"maker={maker.address}&" \
-              f"per_page=10000"
+              f"per_page={per_page}"
 
-        response = requests.get(url, timeout=self.timeout).json()
-        return list(map(lambda item: Order.from_json(self.exchange, item), response))
+        response = requests.get(url, timeout=self.timeout)
+        if not response.ok:
+            raise Exception(f"Failed to fetch 0x orders from the relayer: {response.text} ({response.status_code})")
+
+        return list(map(lambda item: Order.from_json(self.exchange, item), response.json()))
 
     def calculate_fees(self, order: Order) -> Order:
         """Takes and order and returns the same order with proper relayer fees.
@@ -607,7 +611,7 @@ class ZrxRelayerApi:
         assert(isinstance(order, Order))
 
         response = requests.post(f"{self.api_server}/v0/order", json=order.to_json(), timeout=self.timeout)
-        if response.status_code == 201:
+        if response.status_code in [200, 201]:
             self.logger.info(f"Placed 0x order: {order}")
             return True
         else:

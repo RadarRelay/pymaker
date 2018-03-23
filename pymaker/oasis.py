@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017 reverendus
+# Copyright (C) 2017-2018 reverendus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -19,6 +19,7 @@ from pprint import pformat
 from typing import Optional, List
 
 from web3 import Web3
+from web3.utils.events import get_event_data
 
 from pymaker import Contract, Address, Transact
 from pymaker.numeric import Wad
@@ -170,8 +171,6 @@ class SimpleMarket(Contract):
         self.web3 = web3
         self.address = address
         self._contract = self._get_contract(web3, self.abi, address)
-        self._none_orders = set()
-        self._alien_orders = {}
 
     @staticmethod
     def deploy(web3: Web3):
@@ -349,13 +348,8 @@ class SimpleMarket(Contract):
         """
         assert(isinstance(order_id, int))
 
-        # if an order is None, it won't become not-None again for the same OTC instance
-        if order_id in self._none_orders:
-            return None
-
         array = self._contract.call().offers(order_id)
         if array[5] == 0:
-            self._none_orders.add(order_id)
             return None
         else:
             return Order(market=self, order_id=order_id, maker=Address(array[4]), pay_token=Address(array[1]),
@@ -397,17 +391,8 @@ class SimpleMarket(Contract):
         """
         assert(isinstance(maker, Address))
 
-        # `self._alien_orders[maker]` is a set containing ids of orders which are *not* *owned* by
-        # a particular maker. We initialize it with an empty set if this maker hasn't been queried yet.
-        if maker not in self._alien_orders:
-            self._alien_orders[maker] = set()
-
         result = []
         for order_id in range(self.get_last_order_id()):
-            # If we already know this order cannot be owned by this particular maker, we skip it.
-            if order_id in self._alien_orders[maker]:
-                continue
-
             # Query the order.
             order = self.get_order(order_id + 1)
             if order is None:
@@ -417,7 +402,6 @@ class SimpleMarket(Contract):
             # we add it to `_alien_orders[maker]` so the next time `get_orders_by_maker()` is called
             # with the same parameter we will be able to rule out these orders straight away.
             if order.maker != maker:
-                self._alien_orders[maker].add(order_id)
                 continue
 
             result.append(order)
@@ -430,6 +414,8 @@ class SimpleMarket(Contract):
 
         The `pay_amount` of `pay_token` token will be taken from you on order creation and deposited
         in the market contract. Allowance needs to be set first - refer to the `approve()` method.
+
+        When complete, `receipt.result` will contain order_id of the new order.
 
         Args:
             pay_token: Address of the ERC20 token you want to put on sale.
@@ -448,7 +434,8 @@ class SimpleMarket(Contract):
         assert(buy_amount > Wad(0))
 
         return Transact(self, self.web3, self.abi, self.address, self._contract,
-                        'make', [pay_token.address, buy_token.address, pay_amount.value, buy_amount.value])
+                        'make', [pay_token.address, buy_token.address, pay_amount.value, buy_amount.value], None,
+                        self._make_order_id_result_function)
 
     def bump(self, order_id: int) -> Transact:
         """Bumps an order.
@@ -502,6 +489,18 @@ class SimpleMarket(Contract):
         assert(isinstance(order_id, int))
 
         return Transact(self, self.web3, self.abi, self.address, self._contract, 'kill', [int_to_bytes32(order_id)])
+
+    @staticmethod
+    def _make_order_id_result_function(receipt):
+        receipt_logs = receipt['logs']
+        if receipt_logs is not None:
+            for receipt_log in receipt_logs:
+                if len(receipt_log['topics']) > 0 and receipt_log['topics'][0] == '0x773ff502687307abfa024ac9f62f9752a0d210dac2ffd9a29e38e12e2ea82c82':
+                    log_make_abi = [abi for abi in SimpleMarket.abi if abi.get('name') == 'LogMake'][0]
+                    event_data = get_event_data(log_make_abi, receipt_log)
+                    return bytes_to_int(event_data['args']['id'])
+
+        return None
 
     def __repr__(self):
         return f"SimpleMarket('{self.address}')"
@@ -688,6 +687,8 @@ class MatchingMarket(ExpiringMarket):
         may not even be placed at all as the attempt to calculate the position by the contract will likely fail
         due to high gas usage.
 
+        When complete, `receipt.result` will contain order_id of the new order.
+
         Args:
             pay_token: Address of the ERC20 token you want to put on sale.
             pay_amount: Amount of the `pay_token` token you want to put on sale.
@@ -716,7 +717,8 @@ class MatchingMarket(ExpiringMarket):
             assert(pos >= 0)
 
         return Transact(self, self.web3, self.abi, self.address, self._contract,
-                        'offer', [pay_amount.value, pay_token.address, buy_amount.value, buy_token.address, pos])
+                        'offer', [pay_amount.value, pay_token.address, buy_amount.value, buy_token.address, pos], None,
+                        self._make_order_id_result_function)
 
     def position(self, pay_token: Address, pay_amount: Wad, buy_token: Address, buy_amount: Wad) -> int:
         """Calculate the position (`pos`) new order should be inserted at to minimize gas costs.
@@ -747,9 +749,12 @@ class MatchingMarket(ExpiringMarket):
         assert(isinstance(buy_token, Address))
         assert(isinstance(buy_amount, Wad))
 
-        orders = filter(lambda o: o.pay_token == pay_token and
-                                  o.buy_token == buy_token and
-                                  o.pay_amount / o.buy_amount >= pay_amount / buy_amount, self.get_orders())
+        self.logger.debug("Enumerating orders for position calculation...")
+
+        orders = filter(lambda order: order.pay_amount / order.buy_amount >= pay_amount / buy_amount,
+                        self.get_orders(pay_token, buy_token))
+
+        self.logger.debug("Enumerating orders for position calculation finished")
 
         sorted_orders = sorted(orders, key=lambda o: o.pay_amount / o.buy_amount)
         return sorted_orders[0].order_id if len(sorted_orders) > 0 else 0

@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017 reverendus
+# Copyright (C) 2017-2018 reverendus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -35,16 +35,16 @@ class Lifecycle:
     a shutdown phase at the end.
 
     One could as well initialize the keeper and start listening for events themselves
-    i.e. without using `Web3Lifecycle`, just that this class takes care of some quirks.
+    i.e. without using `Lifecycle`, just that this class takes care of some quirks.
     For example the listener threads of web3.py tend to die at times, which causes
     the client to stop receiving events without even knowing something might be wrong.
-    `Web3Lifecycle` does some tricks to monitor for it, and shutdowns the keeper the
+    `Lifecycle` does some tricks to monitor for it, and shutdowns the keeper the
     moment it detects something may be wrong with the listener threads.
 
     Other quirk is the new block filter callback taking more time to execute that
     the time between subsequent blocks. If you do not handle it explicitly,
     the event queue will pile up and the keeper won't work as expected.
-    `Web3Lifecycle` used :py:class:`pymaker.util.AsyncCallback` to handle it properly.
+    `Lifecycle` used :py:class:`pymaker.util.AsyncCallback` to handle it properly.
 
     It also handles:
     - waiting for the node to have at least one peer and sync before starting the keeper,
@@ -61,10 +61,10 @@ class Lifecycle:
             lifecycle.every(15, self.do_something_else)
             lifecycle.on_shutdown(self.some_shutdown_function)
 
-    once called like that, `Web3Lifecycle` will enter an infinite loop.
+    once called like that, `Lifecycle` will enter an infinite loop.
 
     Attributes:
-        web3: Instance of the `Web3` class from `web3.py`.
+        web3: Instance of the `Web3` class from `web3.py`. Optional.
     """
     logger = logging.getLogger()
 
@@ -173,7 +173,7 @@ class Lifecycle:
             return
 
         try:
-            self.web3.eth.sign(self.web3.eth.defaultAccount, "test")
+            self.web3.eth.sign(self.web3.eth.defaultAccount, "pymaker testing if account is unlocked")
         except:
             self.logger.fatal(f"Account {self.web3.eth.defaultAccount} is not unlocked")
             self.logger.fatal(f"Unlocking the account is necessary for the keeper to operate")

@@ -15,17 +15,18 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import pytest
+from eth_abi.encoding import get_single_encoder
 
-from pymaker.deployment import Deployment
-
-
-@pytest.fixture(scope='session')
-def new_deployment() -> Deployment:
-    return Deployment()
+from pymaker import Address
 
 
-@pytest.fixture()
-def deployment(new_deployment: Deployment) -> Deployment:
-    new_deployment.reset()
-    return new_deployment
+def encode_address(address: Address) -> bytes:
+    return get_single_encoder("address", None, None)(address.address)[12:]
+
+
+def encode_uint256(value: int) -> bytes:
+    return get_single_encoder("uint", 256, None)(value)
+
+
+def encode_bytes(value: bytes) -> bytes:
+    return get_single_encoder("bytes", len(value), None)(value)

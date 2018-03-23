@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017 reverendus
+# Copyright (C) 2017-2018 reverendus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -67,6 +67,18 @@ class GeneralMarketTest:
 
         # and
         assert self.otc.get_orders() == [self.otc.get_order(1)]
+
+    def test_make_returns_new_order_ids(self):
+        # given
+        self.otc.approve([self.token1], directly())
+
+        # expect
+        for number in range(1, 10):
+            receipt = self.otc.make(pay_token=self.token1.address, pay_amount=Wad.from_number(1),
+                                    buy_token=self.token2.address, buy_amount=Wad.from_number(2)).transact()
+
+            assert receipt.result == number
+            assert self.otc.get_last_order_id() == number
 
     def test_get_orders_by_pair(self):
         # given

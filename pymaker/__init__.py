@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017 reverendus
+# Copyright (C) 2017-2018 reverendus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -147,7 +147,6 @@ class Contract:
                          'fromBlock': max(block_number-number_of_past_blocks, 0),
                          'toBlock': block_number}
         thread = contract.pastEvents(event, filter_params, self._event_callback(cls, handler, True))
-        register_filter_thread(thread)
         thread.join()
         return events
 
@@ -224,15 +223,18 @@ class Receipt:
         transfers: A list of ERC20 token transfers resulting from the execution
             of this Ethereum transaction. Each transfer is an instance of the
             :py:class:`pymaker.Transfer` class.
+        result: Transaction-specific return value (i.e. new order id for Oasis
+            order creation transaction).
         successful: Boolean flag which is `True` if the Ethereum transaction
             was successful. We consider transaction successful if the contract
             method has been executed without throwing.
     """
-    def __init__(self, receipt):
+    def __init__(self, receipt, result):
         self.raw_receipt = receipt
         self.transaction_hash = receipt['transactionHash']
         self.gas_used = receipt['gasUsed']
         self.transfers = []
+        self.result = result
 
         receipt_logs = receipt['logs']
         if (receipt_logs is not None) and (len(receipt_logs) > 0):
@@ -263,7 +265,8 @@ class Transact:
                  contract: Optional[object],
                  function_name: Optional[str],
                  parameters: Optional[list],
-                 extra: Optional[dict] = None):
+                 extra: Optional[dict] = None,
+                 result_function=None):
         assert(isinstance(origin, object) or (origin is None))
         assert(isinstance(web3, Web3))
         assert(isinstance(abi, list) or (abi is None))
@@ -272,6 +275,7 @@ class Transact:
         assert(isinstance(function_name, str) or (function_name is None))
         assert(isinstance(parameters, list) or (parameters is None))
         assert(isinstance(extra, dict) or (extra is None))
+        assert(callable(result_function) or (result_function is None))
 
         self.origin = origin
         self.web3 = web3
@@ -281,11 +285,13 @@ class Transact:
         self.function_name = function_name
         self.parameters = parameters
         self.extra = extra
+        self.result_function = result_function
 
     def _get_receipt(self, transaction_hash: str) -> Optional[Receipt]:
         receipt = self.web3.eth.getTransactionReceipt(transaction_hash)
         if receipt is not None and receipt['blockNumber'] is not None:
-            return Receipt(receipt)
+            result = self.result_function(receipt) if self.result_function is not None else None
+            return Receipt(receipt, result)
         else:
             return None
 
