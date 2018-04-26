@@ -196,12 +196,13 @@ class TestReceipt:
 
     def test_parsing_receipt(self, receipt_success):
         # given
-        receipt = Receipt(receipt_success, None)
+        receipt = Receipt(receipt_success)
 
         # expect
         assert receipt.transaction_hash == '0x8b6851e40d017b2004a54eae3e9e47614398b54bbbaae150eaa889ec36470ec8'
         assert receipt.gas_used == 57192
         assert len(receipt.transfers) == 1
+        assert len(receipt.logs) == 3
         assert receipt.transfers[0] == Transfer(token_address=Address('0x53eccc9246c1e537d79199d0c7231e425a40f896'),
                                                 from_address=Address('0x375d52588c3f39ee7710290237a95c691d8432e7'),
                                                 to_address=Address('0x0046f01ad360270605e0e5d693484ec3bfe43ba8'),
@@ -209,8 +210,8 @@ class TestReceipt:
 
     def test_should_recognize_successful_and_failed_transactions(self, receipt_success, receipt_failed):
         # expect
-        assert Receipt(receipt_success, None).successful is True
-        assert Receipt(receipt_failed, None).successful is False
+        assert Receipt(receipt_success).successful is True
+        assert Receipt(receipt_failed).successful is False
 
 
 class TestTransfer:

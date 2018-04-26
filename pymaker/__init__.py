@@ -229,12 +229,12 @@ class Receipt:
             was successful. We consider transaction successful if the contract
             method has been executed without throwing.
     """
-    def __init__(self, receipt, result):
+    def __init__(self, receipt):
         self.raw_receipt = receipt
         self.transaction_hash = receipt['transactionHash']
         self.gas_used = receipt['gasUsed']
         self.transfers = []
-        self.result = result
+        self.result = None
 
         receipt_logs = receipt['logs']
         if (receipt_logs is not None) and (len(receipt_logs) > 0):
@@ -251,6 +251,9 @@ class Receipt:
         else:
             self.successful = False
 
+    @property
+    def logs(self):
+        return self.raw_receipt['logs']
 
 class Transact:
     """Represents an Ethereum transaction before it gets executed."""
@@ -288,10 +291,13 @@ class Transact:
         self.result_function = result_function
 
     def _get_receipt(self, transaction_hash: str) -> Optional[Receipt]:
-        receipt = self.web3.eth.getTransactionReceipt(transaction_hash)
-        if receipt is not None and receipt['blockNumber'] is not None:
-            result = self.result_function(receipt) if self.result_function is not None else None
-            return Receipt(receipt, result)
+        raw_receipt = self.web3.eth.getTransactionReceipt(transaction_hash)
+        if raw_receipt is not None and raw_receipt['blockNumber'] is not None:
+            receipt = Receipt(raw_receipt)
+            receipt.result = self.result_function(receipt) if self.result_function is not None else None
+
+            return receipt
+
         else:
             return None
 
@@ -417,11 +423,7 @@ class Transact:
         # it means there is no point in sending the transaction, thus we fail instantly and
         # do not increment the nonce. If the estimation is successful, we pass the calculated
         # gas value (plus some `gas_buffer`) to the subsequent `transact` calls so it does not
-        # try to estimate it again. If it would try to estimate it again it could turn out
-        # this transaction will fail (another block might have been mined in the meantime for
-        # example), which would mean we incremented the nonce but never used it.
-        #
-        # This is why gas estimation has to happen first and before the nonce gets incremented.
+        # try to estimate it again.
         try:
             gas_estimate = self.estimated_gas(Address(from_account))
         except:
@@ -467,7 +469,7 @@ class Transact:
             # - the gas price requested has changed since the last transaction has been sent
             gas_price_value = gas_price.get_gas_price(seconds_elapsed)
             if len(tx_hashes) == 0 or ((gas_price_value is not None) and (gas_price_last is not None) and
-                                           (gas_price_value > gas_price_last)):
+                                           (gas_price_value > gas_price_last * 1.1)):
                 gas_price_last = gas_price_value
 
                 try:

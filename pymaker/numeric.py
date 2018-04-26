@@ -105,6 +105,9 @@ class Wad:
         else:
             raise ArithmeticError
 
+    def __abs__(self):
+        return Wad(abs(self.value))
+
     def __eq__(self, other):
         if isinstance(other, Wad):
             return str(self) == str(other)
@@ -216,6 +219,9 @@ class Ray:
             return Ray(int((Decimal(self.value) * (Decimal(10) ** Decimal(27)) / Decimal(other.value)).quantize(1, rounding=ROUND_DOWN)))
         else:
             raise ArithmeticError
+
+    def __abs__(self):
+        return Ray(abs(self.value))
 
     def __eq__(self, other):
         if isinstance(other, Ray):
